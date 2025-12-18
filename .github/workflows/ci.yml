@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 9.0.100
+
+    - name: Restore dependencies
+      run: dotnet restore Lab3.sln
+
+    - name: Build solution
+      run: dotnet build Lab3.sln --no-restore -warnaserror
+
+    - name: Run tests
+      run: dotnet test Lab3.sln --verbosity normal --logger "console;verbosity=detailed"
+
+    - name: Smoke test
+      run: |
+        echo "Running internal tests..."
+        dotnet run --project lab3.fsproj -- --test
+        echo "Basic functionality test..."
+        echo -e "0 0\n1 1" | dotnet run --project lab3.fsproj -- --linear --step 0.5

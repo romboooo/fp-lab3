@@ -30,12 +30,13 @@ let updateWindowState (state: WindowState) (newPoint: Point) =
     
     let maxPoints = 
         match state.Method with
-        | Linear -> System.Int32.MaxValue
-        | Newton n -> n 
+        | Linear -> System.Int32.MaxValue // Keep all points for linear
+        | Newton n -> n // Keep only n points for Newton
     
     let trimmedPoints =
         if List.length updatedPoints > maxPoints then
-            updatedPoints |> List.take maxPoints
+            // For Newton: keep only the n most recent points (by X, assuming sorted input)
+            updatedPoints |> List.skip (updatedPoints.Length - maxPoints)
         else
             updatedPoints
     
@@ -73,22 +74,16 @@ let generateInterpolationPoints (state: WindowState) (newXMax: float option) =
             else
                 let interpFunc = getInterpolationFunction state.Method
                 
-                let canInterpolate (x: float) =
-                    match state.Method with
-                    | Linear -> List.length sorted >= 2
-                    | Newton n -> List.length sorted >= n
-                
                 let rec generate acc currentX =
-                    if currentX <= xMax + 1e-10 && canInterpolate currentX then
+                    if currentX <= xMax + 1e-10 then
                         try
                             let y = interpFunc sorted currentX
                             let point = { X = currentX; Y = y }
                             generate (point :: acc) (currentX + state.Step)
                         with
                         | ex -> 
+                            // Skip this point
                             generate acc (currentX + state.Step)
-                    elif currentX <= xMax + 1e-10 then
-                        generate acc (currentX + state.Step)
                     else
                         List.rev acc
                 
