@@ -49,12 +49,11 @@ let newtonInterpolation (n: int) (points: Point list) (x: float) =
         for i in 0..m-j-1 do
             table.[i, j] <- (table.[i+1, j-1] - table.[i, j-1]) / (xs.[i+j] - xs.[i])
     
-    // Замена цикла с референсными ячейками на функциональную свёртку
-    let indices = [m-2 .. -1 .. 0] // Генерируем индексы в обратном порядке
+    let indices = [m-2 .. -1 .. 0] 
     List.fold 
         (fun acc i -> 
             acc * (x - xs.[i]) + table.[0, i])
-        table.[0, m-1] // Начальное значение — последний элемент таблицы
+        table.[0, m-1] 
         indices
 
 let getInterpolationFunction = function
