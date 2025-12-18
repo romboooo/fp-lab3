@@ -16,78 +16,83 @@ let parsePoint (line: string) =
                 trimmedLine.Split([|'\t'; ' '|], System.StringSplitOptions.RemoveEmptyEntries)
         
         if parts.Length < 2 then
-            failwith (sprintf "Invalid point format: %s" line)
+            None
         else
             try 
                 Some { X = float parts.[0]; Y = float parts.[1] }
             with
-            | _ -> failwith (sprintf "Cannot parse numbers: %s" line)
+            | _ -> None
 
 let updateWindowState (state: WindowState) (newPoint: Point) =
     let updatedPoints = 
         (newPoint :: state.Points)
         |> List.sortBy (fun p -> p.X)
-
+    
     let maxPoints = 
         match state.Method with
-        | Linear -> 2
-        | Newton n -> n
+        | Linear -> System.Int32.MaxValue
+        | Newton n -> n 
     
     let trimmedPoints =
         if List.length updatedPoints > maxPoints then
-            updatedPoints |> List.rev |> List.take maxPoints |> List.rev
+            updatedPoints |> List.take maxPoints
         else
             updatedPoints
+    
     { state with Points = trimmedPoints }
 
 let generateInterpolationPoints (state: WindowState) (newXMax: float option) =
     if List.length state.Points < 2 then
-        []  
+        []
     else
         let sorted = state.Points |> List.sortBy (fun p -> p.X)
         
-        // Для линейной интерполяции берём последние 2 точки
-        let pointsForInterpolation = 
+        let minPointsNeeded = 
             match state.Method with
-            | Linear -> sorted |> List.rev |> List.take 2 |> List.rev
-            | Newton n -> sorted |> List.rev |> List.take n |> List.rev
+            | Linear -> 2
+            | Newton n -> n
         
-        let xMin = pointsForInterpolation.Head.X
-        let xMax = 
-            match newXMax with
-            | Some max -> max
-            | None -> pointsForInterpolation |> List.last |> fun p -> p.X
-        
-        let startX = 
-            match state.LastProcessedX with
-            | Some x -> x + state.Step
-            | None -> xMin
-        
-        if startX > xMax + 1e-10 then
+        if List.length sorted < minPointsNeeded then
             []
         else
-            let interpFunc = getInterpolationFunction state.Method
+            let xMin = sorted.Head.X
+            let xMax = 
+                match newXMax with
+                | Some max -> max
+                | None -> (List.last sorted).X
             
-            let rec generate acc current =
-                if current <= xMax + 1e-10 then
-                    generate (current :: acc) (current + state.Step)
-                else
-                    List.rev acc
+            let startX = 
+                match state.LastProcessedX with
+                | Some x -> 
+                    let nextX = x + state.Step
+                    if nextX < xMin then xMin else nextX
+                | None -> xMin
             
-            let xValues = generate [] startX
-            
-            let filteredXValues = 
-                xValues 
-                |> List.filter (fun x -> x <= xMax + 1e-10)
-            
-            filteredXValues
-            |> List.map (fun x -> 
-                try
-                    let y = interpFunc pointsForInterpolation x
-                    Some { X = x; Y = y }
-                with
-                | _ -> None)
-            |> List.choose id
+            if startX > xMax + 1e-10 then
+                []
+            else
+                let interpFunc = getInterpolationFunction state.Method
+                
+                let canInterpolate (x: float) =
+                    match state.Method with
+                    | Linear -> List.length sorted >= 2
+                    | Newton n -> List.length sorted >= n
+                
+                let rec generate acc currentX =
+                    if currentX <= xMax + 1e-10 && canInterpolate currentX then
+                        try
+                            let y = interpFunc sorted currentX
+                            let point = { X = currentX; Y = y }
+                            generate (point :: acc) (currentX + state.Step)
+                        with
+                        | ex -> 
+                            generate acc (currentX + state.Step)
+                    elif currentX <= xMax + 1e-10 then
+                        generate acc (currentX + state.Step)
+                    else
+                        List.rev acc
+                
+                generate [] startX
 
 let processNewPoint (states: WindowState list) (point: Point) =
     states

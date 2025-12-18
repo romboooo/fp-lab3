@@ -17,11 +17,7 @@ let parseArgs (args: string[]) =
                 parse { opts with Methods = newMethods } (i + 1)
             | "--newton" when i + 1 < args.Length ->
                 let n = int args.[i + 1]
-                let alreadyExists = 
-                    opts.Methods |> List.exists (function Newton m when m = n -> true | _ -> false)
-                let newMethods = 
-                    if alreadyExists then opts.Methods
-                    else (Newton n) :: opts.Methods
+                let newMethods = (Newton n) :: opts.Methods
                 parse { opts with Methods = newMethods } (i + 2)
             | "--step" when i + 1 < args.Length ->
                 let step = float args.[i + 1]
@@ -29,11 +25,11 @@ let parseArgs (args: string[]) =
             | "--output-all" ->
                 parse { opts with OutputAll = true } (i + 1)
             | arg ->
-                printfn "Unknown argument: %s" arg
+                printfn "Warning: Unknown argument: %s" arg
                 parse opts (i + 1)
     
     let defaultOpts = {
-        Methods = []  
+        Methods = []
         Step = 0.1
         OutputAll = false
     }
@@ -43,7 +39,7 @@ let parseArgs (args: string[]) =
     if List.isEmpty result.Methods then
         { result with Methods = [Linear] }
     else
-        result
+        { result with Methods = List.rev result.Methods }
 
 let initializeWindowStates (opts: Options) =
     opts.Methods
@@ -58,11 +54,10 @@ let printResults (results: (string * Point list) list) (outputAll: bool) =
     |> List.iter (fun (methodName, points) ->
         points
         |> List.iter (fun point ->
-            printfn "%s: %f %f" methodName point.X point.Y))
+            printfn "%s: %.6f %.6f" methodName point.X point.Y))
 
 [<EntryPoint>]
 let main argv =
-    printfn "TODO: NEWTON POLINOM!!!"
     try
         let opts = parseArgs argv
         
@@ -71,41 +66,36 @@ let main argv =
             printfn "Usage: program [--linear] [--newton N] [--step STEP] [--output-all]"
             1
         else
-            printfn "Starting interpolation with methods: %A" opts.Methods
-            printfn "Step: %f" opts.Step
-            printfn "Waiting for input (format: x y)..."
-            
             let initialStates = initializeWindowStates opts
             
             let rec processInput (states: WindowState list) =
                 match Console.ReadLine() with
                 | null -> 
+                    // EOF reached
                     let finalResults = 
                         finalizeProcessing states
                         |> List.map (fun r -> (r.MethodName, r.NewPoints))
+                    
                     printResults finalResults opts.OutputAll
                     states
                 | line ->
-                    try
-                        match parsePoint line with
-                        | Some point ->
-                            let processed = processNewPoint states point
-                            
-                            let resultsToPrint = 
-                                processed 
-                                |> List.map (fun r -> (r.MethodName, r.NewPoints))
-                            
-                            printResults resultsToPrint opts.OutputAll
-                            
-                            let newStates = 
-                                processed 
-                                |> List.map (fun r -> r.State)
-                            
-                            processInput newStates
-                        | None -> processInput states
-                    with
-                    | ex -> 
-                        printfn "Error processing line '%s': %s" line ex.Message
+                    match parsePoint line with
+                    | Some point ->
+                        let processed = processNewPoint states point
+                        
+                        let resultsToPrint = 
+                            processed 
+                            |> List.map (fun r -> (r.MethodName, r.NewPoints))
+                        
+                        printResults resultsToPrint opts.OutputAll
+                        
+                        let newStates = 
+                            processed 
+                            |> List.map (fun r -> r.State)
+                        
+                        processInput newStates
+                    | None -> 
+                        // Skip invalid lines
                         processInput states
             
             processInput initialStates |> ignore
