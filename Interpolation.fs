@@ -8,7 +8,6 @@ let linearInterpolation (points: Point list) (x: float) =
     
     let sorted = points |> List.sortBy (fun p -> p.X)
     
-    // Find segment containing x
     let rec findSegment = function
         | [] -> None
         | [_] -> None
@@ -23,17 +22,14 @@ let linearInterpolation (points: Point list) (x: float) =
         let t = (x - p1.X) / (p2.X - p1.X)
         p1.Y + t * (p2.Y - p1.Y)
     | None ->
-        // Extrapolation: use the closest point
         sorted
         |> List.minBy (fun p -> abs (p.X - x))
         |> fun p -> p.Y
 
-// Simple Newton interpolation with divided differences
 let newtonInterpolation (n: int) (points: Point list) (x: float) =
     if List.length points < n then
         failwithf "At least %d points are required for Newton interpolation" n
     
-    // Take n nearest points to x
     let nearest = 
         points 
         |> List.sortBy (fun p -> abs (p.X - x))
@@ -43,25 +39,23 @@ let newtonInterpolation (n: int) (points: Point list) (x: float) =
     let xs = nearest |> List.map (fun p -> p.X)
     let ys = nearest |> List.map (fun p -> p.Y)
     
-    // Compute divided differences using array for simplicity
     let m = n
-    let table = Array2D.create m m 0.0
+    let table = Array2D.init m m (fun i j -> 0.0)
     
-    // First column is y values
     for i in 0..m-1 do
         table.[i, 0] <- ys.[i]
     
-    // Compute divided differences
     for j in 1..m-1 do
         for i in 0..m-j-1 do
             table.[i, j] <- (table.[i+1, j-1] - table.[i, j-1]) / (xs.[i+j] - xs.[i])
     
-    // Evaluate Newton polynomial
-    let result = ref table.[0, m-1]
-    for i in m-2 .. -1 .. 0 do
-        result := !result * (x - xs.[i]) + table.[0, i]
-    
-    !result
+    // Замена цикла с референсными ячейками на функциональную свёртку
+    let indices = [m-2 .. -1 .. 0] // Генерируем индексы в обратном порядке
+    List.fold 
+        (fun acc i -> 
+            acc * (x - xs.[i]) + table.[0, i])
+        table.[0, m-1] // Начальное значение — последний элемент таблицы
+        indices
 
 let getInterpolationFunction = function
     | Linear -> linearInterpolation
